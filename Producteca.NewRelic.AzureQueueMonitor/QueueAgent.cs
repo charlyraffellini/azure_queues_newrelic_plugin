@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Microsoft.ServiceBus.Messaging;
 using Microsoft.WindowsAzure.Storage;
 using Microsoft.WindowsAzure.Storage.Queue;
 using NewRelic.Platform.Sdk;
@@ -103,15 +104,47 @@ namespace Producteca.NewRelic.AzureQueueMonitor.Plugin
 				foreach (var queue in queues)
 				{
 					var queueName = queue.Path;
-					var count = queue.MessageCountDetails.ActiveMessageCount;
 
-					string metricName = string.Format("servicebus/{0}/{1}", accountName, queueName);
+					ReportQueueMessages(queue, accountName, queueName);
 
-					ReportMetric(metricName, "messages", count);
+					ReportDeadLetterMessages(queue, accountName, queueName);
+				}
+
+				var topics = nsm.GetTopics();
+
+				foreach (var topic in topics)
+				{
+					var topicName = topic.Path;
+
+					var subscriptions = nsm.GetSubscriptions(topicName);
+					foreach (var subscription in subscriptions)
+					{
+						var count = subscription.MessageCountDetails.ActiveMessageCount;
+						var metricName = string.Format("servicebus/{0}/topic/{1}/subscription/{2}", accountName, topicName, subscription.Name);
+						ReportMetric(metricName, "messages", count);
+
+						count = subscription.MessageCountDetails.DeadLetterMessageCount;
+						metricName = string.Format("servicebus/{0}/topic/{1}/subscription/{2}/DeadLetter", accountName, topicName, subscription.Name);
+						ReportMetric(metricName, "messages", count);
+					}
 				}
 
 			}
 			#endregion
+		}
+
+		private void ReportQueueMessages(QueueDescription queue, string accountName, string queueName)
+		{
+			var count = queue.MessageCountDetails.ActiveMessageCount;
+			string metricName = string.Format("servicebus/{0}/{1}", accountName, queueName);
+			ReportMetric(metricName, "messages", count);
+		}
+
+		private void ReportDeadLetterMessages(QueueDescription queue, string accountName, string queueName)
+		{
+			var count = queue.MessageCountDetails.DeadLetterMessageCount;
+			var metricName = string.Format("servicebus/{0}/{1}/DeadLetter", accountName, queueName);
+			ReportMetric(metricName, "messages", count);
 		}
 	}
 }
